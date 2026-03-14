@@ -1,32 +1,42 @@
+# Environment / Secrets
+.env
+.env.local
+.env.*.local
 
-# Ignore build directory
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
 build/
-# Ignore build like directory
-build*/
-# Ignore all files in the build directory
-build/*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
 
-# Ignore tests build directory
-tests/build/
-tests/build*/
+# Node / Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Test binaries
-tests/**/ndd_filter_test
+# Docker
+*.log
 
-# macOS debug symbols
-*.dSYM/
-
-# Sometimes data files are created for tetsing
-data/
-data/*
-
-# VS Code directory
-.vscode/
-.vscode/*
-
-# Frontend
-frontend/
-frontend/*
-
-# DS Store
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

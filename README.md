@@ -1,139 +1,513 @@
-<p align="center">
-  <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-      <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo-light.svg">
-      <img height="100" alt="Endee" src="docs/assets/logo-dark.svg">
-  </picture>
-</p>
+# ResolveAI — AI Customer Support Platform
 
-<p align="center">
-    <b>High-performance open-source vector database for AI search, RAG, semantic search, and hybrid retrieval.</b>
-</p>
+An AI-powered, multi-tenant customer support platform that automatically resolves repeatable customer issues using **RAG (Retrieval-Augmented Generation)** with [Endee](https://github.com/endee-io/endee) as the vector database. When the AI is uncertain, it intelligently escalates to human agents — and then **learns from every human resolution** to handle similar queries automatically in the future.
 
-<p align="center">
-    <a href="./docs/getting-started.md"><img src="https://img.shields.io/badge/Quick_Start-Local_Setup-success?style=flat-square" alt="Quick Start"></a>
-    <a href="https://docs.endee.io/quick-start"><img src="https://img.shields.io/badge/Docs-Quick_Start-success?style=flat-square" alt="Docs"></a>
-    <a href="https://github.com/endee-io/endee/blob/master/LICENSE"><img src="https://img.shields.io/github/license/endee-io/endee?style=flat-square" alt="License"></a>
-    <a href="https://discord.gg/5HFGqDZQE3"><img src="https://img.shields.io/badge/Discord-Join_Chat-5865F2?logo=discord&style=flat-square" alt="Discord"></a>
-    <a href="https://endee.io/"><img src="https://img.shields.io/badge/Website-Endee-111111?style=flat-square" alt="Website"></a>
-    <!-- <a href="https://endee.io/benchmarks"><img src="https://img.shields.io/badge/Benchmarks-Coming_Soon-1F8B4C?style=flat-square" alt="Benchmarks"></a> -->
-    <!-- <a href="https://endee.io/cloud"><img src="https://img.shields.io/badge/Cloud-Coming_Soon-2496ED?style=flat-square" alt="Cloud"></a> -->
-</p>
+---
 
-<p align="center">
-<strong><a href="./docs/getting-started.md">Quick Start</a> • <a href="#why-endee">Why Endee</a> • <a href="#use-cases">Use Cases</a> • <a href="#features">Features</a> • <a href="#api-and-clients">API and Clients</a> • <a href="#docs-and-links">Docs</a> • <a href="#community-and-contact">Contact</a></strong>
-</p>
+## Problem Statement
 
-# Endee: Open-Source Vector Database for AI Search
+Customer support teams are overwhelmed by repetitive questions — password resets, billing inquiries, shipping status, return policies. These consume agent time while customers wait. Existing chatbots rely on rigid scripts and fail outside predefined flows.
 
-**Endee** is a high-performance open-source vector database built for AI search and retrieval workloads. It is designed for teams building **RAG pipelines**, **semantic search**, **hybrid search**, recommendation systems, and filtered vector retrieval APIs that need production-oriented performance and control.
+**ResolveAI solves this by:**
+1. Ingesting your existing knowledge base (FAQs, docs, Slack threads, emails, PDFs)
+2. Using semantic vector search (Endee) to find relevant answers for each query
+3. Generating natural-language responses with an LLM (Google Gemini) grounded in your data
+4. Automatically escalating when confidence is low
+5. Continuously learning: every human resolution is re-ingested into the KB, improving future accuracy
 
-Endee combines vector search with filtering, sparse retrieval support, backup workflows, and deployment flexibility across local builds and Docker-based environments. The project is implemented in C++ and optimized for modern CPU targets, including AVX2, AVX512, NEON, and SVE2.
+---
 
-If you want the fastest path to evaluate Endee locally, start with the [Getting Started guide](./docs/getting-started.md) or the hosted docs at [docs.endee.io](https://docs.endee.io/quick-start).
+## Key Features
 
-## Why Endee
+| Feature | Description |
+|---------|-------------|
+| **RAG Pipeline** | Semantic search via Endee + LLM generation grounded in KB documents |
+| **Learning Loop** | Resolved tickets are automatically embedded back into Endee for future queries |
+| **Multi-Tenant** | Company-scoped vector filters ensure complete data isolation |
+| **Real-Time Chat** | WebSocket-based widget with typing indicators, presence, and instant staff replies |
+| **RBAC** | Role hierarchy: SuperAdmin > Admin > Staff. JWT-based auth with per-role access control |
+| **Configurable Thresholds** | Per-company auto-resolve and clarification confidence thresholds |
+| **Multi-Source Ingestion** | Text, PDF (with OCR), Slack, Email, Confluence, Notion, Google Drive |
+| **Embeddable Widget** | Single `<script>` tag — works on any website |
+| **Decision Engine** | Weighted scoring: similarity + intent match + recency + source reliability |
 
-- Built as a dedicated vector database for AI applications, search systems, and retrieval-heavy workloads.
-- Supports dense vector retrieval plus sparse search capabilities for hybrid search use cases.
-- Includes payload filtering for metadata-aware retrieval and application-specific query logic.
-- Ships with operational features already documented in this repo, including backup flows and runtime observability.
-- Offers flexible deployment paths: local scripts, manual builds, Docker images, and prebuilt registry images.
+---
 
-## Getting Started
+## System Architecture
 
-The full installation, build, Docker, runtime, and authentication instructions are in [docs/getting-started.md](./docs/getting-started.md).
-
-Fastest local path:
-
-```bash
-chmod +x ./install.sh ./run.sh
-./install.sh --release --avx2
-./run.sh
+```
+                    +-----------------------+
+                    |   Embeddable Widget   |     <script src="widget.js" data-slug="acme">
+                    |  (WebSocket client)   |
+                    +----------+------------+
+                               |
+                    WebSocket /api/v1/ws/widget/{slug}
+                               |
++------------------+           v              +-------------------+
+|  Next.js 16      |    +-----------+         |  Staff Inbox      |
+|  Dashboard       +--->|  FastAPI  |<--------+  (WebSocket)      |
+|  /admin /staff   |    |  Backend  |         |  /staff page      |
++------------------+    +-----+-----+         +-------------------+
+                              |
+              +---------------+---------------+
+              |               |               |
+        +-----v-----+  +-----v-----+  +------v------+
+        |   Endee   |  |  MongoDB  |  |    Redis    |
+        | Vector DB |  | Primary DB|  |  Rate Limit |
+        +-----------+  +-----------+  +-------------+
+              ^
+              |  384-dim embeddings (BAAI/bge-small-en-v1.5)
+              |
+        +-----+-----+
+        | Embedding  |
+        |   Model    |
+        +-----+------+
+              |
+        +-----v------+
+        |  Google     |
+        |  Gemini LLM |
+        +-------------+
 ```
 
-The server listens on port `8080`. For detailed setup paths, supported operating systems, CPU optimization flags, Docker usage, and authentication examples, use:
+### Request Flow
 
-- [Getting Started](./docs/getting-started.md)
-- [Hosted Quick Start Docs](https://docs.endee.io/quick-start)
+1. **Customer sends message** via WebSocket widget
+2. **Intent classification** — LLM categorizes the query (billing, technical, account, etc.)
+3. **Safety check** — "talk to human" requests escalate immediately
+4. **Vector search** — Query embedded with BGE-small, searched in Endee with `company_id` filter
+5. **Weighted scoring** — `similarity * 0.5 + intent_match * 0.2 + recency * 0.15 + reliability * 0.15`
+6. **Decision matrix:**
+   - Score >= 0.82 → **Auto-reply** (RAG-generated answer from top-3 documents)
+   - Score 0.60-0.82 → **Clarify** (suggest related topics, ask follow-up)
+   - Score < 0.60 → **Escalate** to human agent with full context
+7. **Learning loop** — When staff resolves a conversation, the Q&A pair is re-embedded into Endee
 
-## Use Cases
+---
 
-### RAG and AI Retrieval
+## How Endee Is Used
 
-Use Endee as the retrieval layer for question answering, chat assistants, copilots, and other RAG applications that need fast vector search with metadata-aware filtering.
+[Endee](https://github.com/endee-io/endee) is the core vector database powering all semantic search and retrieval in ResolveAI.
 
-### Agentic AI and AI Agent Memory
+### Vector Indexing
 
-Use Endee as the long-term memory and context retrieval layer for AI agents built with frameworks like LangChain, CrewAI, AutoGen, and LlamaIndex. Store and retrieve past observations, tool outputs, conversation history, and domain knowledge mid-execution with low-latency filtered vector search, so your autonomous agents get the right context without stalling their reasoning loop.
+```python
+# services/endee_client.py — Index creation
+client.create_index(
+    name="support_kb",
+    dimension=384,           # BAAI/bge-small-en-v1.5 output
+    space_type="cosine",
+    precision=Precision.INT8D,
+)
+```
 
-### Semantic Search
+### Document Ingestion Pipeline
 
-Build semantic search experiences for documents, products, support content, and knowledge bases using vector similarity search instead of exact keyword-only matching.
+```python
+# services/ingestion.py — Chunking → Embedding → Upsert
+chunks = chunk_text(content, chunk_size=500, overlap=100)   # sentence-aware splitting
+vectors = embedding_service.encode_documents_batch(chunks)   # local BGE-small
 
-### Hybrid Search
+endee_items = [{
+    "id": f"{company_id}_{doc_id}_{i}",
+    "vector": vector,
+    "meta": {
+        "company_id": company_id,       # tenant isolation
+        "doc_id": doc_id,
+        "title": title,
+        "source_type": source_type,     # text/pdf/slack/email/ticket
+        "raw_text": chunk[:500],        # stored for RAG context
+        "is_resolved": "true",          # learning loop flag
+        "category": "billing",
+        "created_at": "2024-01-15T...",
+    },
+}]
 
-Combine dense retrieval, sparse vectors, and filtering to improve relevance for search workflows where both semantic understanding and term-level precision matter.
+index.upsert(endee_items)
+```
 
-### Recommendations and Matching
+### Filtered Semantic Search
 
-Support recommendation, similarity matching, and nearest-neighbor retrieval workflows across text, embeddings, and other high-dimensional representations.
+```python
+# services/endee_client.py — Multi-tenant filtered query
+results = index.query(
+    vector=query_vector,
+    top_k=10,
+    filter=[{"meta.company_id": {"$eq": "company_abc"}}],   # Endee array filter on metadata field
+)
+```
 
-## Features
+Every search is scoped to the requesting company's `company_id`, ensuring **complete multi-tenant data isolation**.
 
-- **Vector search** for AI retrieval and semantic similarity workloads.
-- **Hybrid retrieval support** with sparse vector capabilities documented in [docs/sparse.md](./docs/sparse.md).
-- **Payload filtering** for structured retrieval logic documented in [docs/filter.md](./docs/filter.md).
-- **Backup APIs and flows** documented in [docs/backup-system.md](./docs/backup-system.md).
-- **Operational logging and instrumentation** documented in [docs/logs.md](./docs/logs.md) and [docs/mdbx-instrumentation.md](./docs/mdbx-instrumentation.md).
-- **CPU-targeted builds** for AVX2, AVX512, NEON, and SVE2 deployments.
-- **Docker deployment options** for local and server environments.
+### Learning Loop (Continuous Improvement)
 
-## API and Clients
+```
+Customer asks "Where is my refund?"
+           │
+           ▼
+   No KB match → Escalate to human
+           │
+           ▼
+   Staff resolves: "Refunds are processed within 3-5 business days"
+           │
+           ▼
+   Q+A pair embedded → Endee vector with is_resolved="true"
+           │
+           ▼
+   Next customer asks "Where is my refund?"
+           │
+           ▼
+   Endee returns match (similarity=0.95, is_resolved=true)
+           │
+           ▼
+   Weighted score ≥ 0.82 → Auto-reply with RAG answer ✓
+```
 
-Endee exposes an HTTP API for managing indexes and serving retrieval workloads. The current repo documentation and examples focus on running the server directly and calling its API endpoints.
+Resolved tickets get a **scoring boost**: `intent_match=True` and `reliability=1.0`, ensuring they rank higher in search results and trigger auto-resolution.
 
-Current developer entry points:
+### Weighted Scoring Formula
 
-- [Getting Started](./docs/getting-started.md) for local build and run flows
-- [Hosted Docs](https://docs.endee.io/quick-start) for product documentation
-- [Release Notes 1.0.0](https://github.com/endee-io/endee/releases/tag/1.0.0) for recent platform changes
+```python
+score = (
+    similarity * 0.50 +       # Endee cosine similarity
+    intent_match * 0.20 +     # 1.0 if category matches OR is_resolved
+    recency_factor * 0.15 +   # time-based decay
+    source_reliability * 0.15  # 1.0 for resolved tickets, 0.8 for docs
+)
+```
 
-## Docs and Links
+---
 
-- [Getting Started](./docs/getting-started.md)
-- [Hosted Documentation](https://docs.endee.io/quick-start)
-- [Release Notes](https://github.com/endee-io/endee/releases/tag/1.0.0)
-- [Sparse Search](./docs/sparse.md)
-- [Filtering](./docs/filter.md)
-- [Backups](./docs/backup-system.md)
+## Tech Stack
 
-## Community and Contact
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Vector DB** | [Endee](https://github.com/endee-io/endee) v0.1.6 | Semantic search, multi-tenant vector storage |
+| **Backend** | Python 3.11, FastAPI, Uvicorn | REST API + WebSocket server |
+| **Frontend** | Next.js 16, React 19, Tailwind CSS v4 | Dashboard, admin panel, staff inbox |
+| **Primary DB** | MongoDB 7 (Motor async) | Users, companies, conversations, tickets |
+| **Cache** | Redis 7 | Rate limiting (sliding window) |
+| **LLM** | Google Gemini 2.0 Flash (via REST) | Intent classification, RAG generation |
+| **Embeddings** | BAAI/bge-small-en-v1.5 (local) | 384-dim document/query embeddings |
+| **Auth** | JWT + bcrypt | Role-based access control |
+| **Widget** | Vanilla JavaScript (zero deps) | Embeddable chat w/ WebSocket |
 
-- Join the community on [Discord](https://discord.gg/5HFGqDZQE3)
-- Visit the website at [endee.io](https://endee.io/)
-- For trademark or branding permissions, contact [enterprise@endee.io](mailto:enterprise@endee.io)
+---
 
-## Contributing
+## Installation & Setup
 
-We welcome contributions from the community to help make vector search faster and more accessible for everyone.
+### Prerequisites
 
-- Submit pull requests for fixes, features, and improvements
-- Report bugs or performance issues through GitHub issues
-- Propose enhancements for search quality, performance, and deployment workflows
+- Docker & Docker Compose
+- A Google Gemini API key ([get one free](https://aistudio.google.com/apikey))
+
+### Quick Start (Docker — Recommended)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/DevCadbury/ResolveAI.git
+cd ResolveAI
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env — set GEMINI_API_KEY and JWT_SECRET
+
+# 3. Start all services
+docker compose up --build
+
+# Services:
+#   Frontend  → http://localhost:3000
+#   Backend   → http://localhost:8000  (Swagger docs: /docs)
+#   Endee     → http://localhost:8080
+#   MongoDB   → localhost:27017
+#   Redis     → localhost:6379
+```
+
+### Local Development (Without Docker)
+
+```bash
+# 1. Start infrastructure (Endee, MongoDB, Redis)
+docker compose up endee mongodb redis -d
+
+# 2. Backend
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 3. Frontend (new terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GEMINI_API_KEY` | Google Gemini API key | **Required** |
+| `JWT_SECRET` | JWT signing secret | Change in production |
+| `ENDEE_URL` | Endee server URL | `http://localhost:8080` |
+| `MONGODB_URL` | MongoDB connection string | `mongodb://localhost:27017/support_ai` |
+| `REDIS_URL` | Redis connection string | `redis://localhost:6379` |
+| `AUTO_RESOLVE_THRESHOLD` | Min score for auto-reply | `0.82` |
+| `CLARIFY_THRESHOLD` | Min score for clarification | `0.60` |
+| `RATE_LIMIT_REQUESTS` | Max requests per window | `20` |
+| `RATE_LIMIT_WINDOW_SECONDS` | Rate limit window | `60` |
+
+---
+
+## Usage Guide
+
+### 1. Register a Company
+
+Visit `http://localhost:3000/register` or:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"company_name": "Acme Corp", "email": "admin@acme.com", "password": "secure123"}'
+```
+
+Response includes your company `slug` and `login_url`.
+
+### 2. Log In
+
+Visit `http://localhost:3000/login/{slug}` (e.g., `/login/acme-corp`).
+
+### 3. Ingest Knowledge Base Data
+
+**Dashboard → Knowledge Base tab:**
+- Paste FAQ text, select source type, click "Ingest Document"
+
+**Via API:**
+```bash
+curl -X POST http://localhost:8000/api/v1/kb/ingest \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Refund Policy FAQ",
+    "content": "How do I get a refund? Refunds are processed within 3-5 business days after approval. Go to Account > Orders > Request Refund.",
+    "source_type": "text",
+    "category": "billing"
+  }'
+```
+
+### 4. Generate an API Key
+
+**Dashboard → Developer tab → "+ New Key"**
+
+Or via API:
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/api-key \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+API keys can be listed, generated, and revoked from the Developer tab.
+
+### 5. Embed the Chat Widget
+
+Add this to any HTML page:
+
+```html
+<script src="http://localhost:3000/widget.js"
+  data-slug="acme-corp"
+  data-api-url="http://localhost:8000">
+</script>
+```
+
+Or open `test-widget.html` in your browser for a standalone demo page.
+
+### 6. Test End-to-End
+
+1. Send a message in the widget → AI replies from KB (auto-reply) or escalates
+2. Open **Staff Inbox** (`http://localhost:3000/staff`) → See escalated conversations
+3. Reply from Staff Inbox → Reply appears in widget in real-time via WebSocket
+4. Click "Resolve" → Resolution is ingested back into Endee (learning loop)
+5. Send the same question again → AI now auto-resolves it
+
+---
+
+## API Endpoints
+
+### Authentication
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/v1/auth/register` | None | Register company + admin |
+| POST | `/api/v1/auth/login` | None | Login, returns JWT |
+| GET | `/api/v1/auth/company/{slug}` | None | Public company info |
+| POST | `/api/v1/auth/api-key` | Admin | Generate API key |
+| GET | `/api/v1/auth/api-keys` | Admin | List API keys |
+| DELETE | `/api/v1/auth/api-key/{id}` | Admin | Revoke API key |
+
+### Chat Widget (Legacy)
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/v1/chat/incoming` | API Key | Send message (HTTP) |
+
+### Widget (WebSocket)
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| WS | `/api/v1/ws/widget/{slug}` | None | Real-time chat |
+| POST | `/api/v1/widget/{slug}/open` | None | Open/resume conversation |
+| POST | `/api/v1/widget/{slug}/message` | Session ID | Send message |
+
+### Knowledge Base
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/v1/kb/ingest` | Admin | Ingest text document |
+| POST | `/api/v1/kb/ingest/pdf` | Admin | Ingest PDF |
+| POST | `/api/v1/kb/feedback` | Admin | Learning loop ingestion |
+| GET | `/api/v1/kb/documents` | Staff | List documents |
+| DELETE | `/api/v1/kb/documents/{id}` | Admin | Delete document |
+
+### Conversations (Staff)
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/v1/conversations` | Staff | List conversations |
+| GET | `/api/v1/conversations/{id}` | Staff | Get with messages |
+| POST | `/api/v1/conversations/{id}/message` | Staff | Reply to customer |
+| POST | `/api/v1/conversations/{id}/resolve` | Staff | Resolve + ingest KB |
+| POST | `/api/v1/conversations/{id}/assign` | Admin | Assign to staff |
+
+### Dashboard
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/v1/dashboard/stats` | Staff | Company statistics |
+| GET | `/api/v1/dashboard/tickets` | Staff | List tickets |
+| PATCH | `/api/v1/dashboard/tickets/{id}` | Admin | Resolve ticket |
+
+### Admin
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/v1/admin/staff` | Admin | Create staff user |
+| GET | `/api/v1/admin/staff` | Admin | List staff |
+| DELETE | `/api/v1/admin/staff/{id}` | Admin | Disable staff |
+| GET | `/api/v1/admin/settings` | Admin | Company settings |
+| PATCH | `/api/v1/admin/settings` | Admin | Update thresholds |
+| GET | `/api/v1/admin/kb-entries` | Admin | List KB entries |
+
+### SuperAdmin
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/v1/superadmin/companies` | SuperAdmin | All companies |
+| GET | `/api/v1/superadmin/users` | SuperAdmin | All users |
+| GET | `/api/v1/superadmin/conversations` | SuperAdmin | All conversations |
+
+---
+
+## Testing
+
+```bash
+cd backend
+python -m pytest -v
+```
+
+**126 tests across 8 test files:**
+
+| Test File | Tests | Coverage |
+|-----------|-------|----------|
+| `test_auth_rbac.py` | JWT, RBAC, registration, login, company slug |
+| `test_conversations.py` | Widget open/message, staff reply/resolve, cross-company isolation |
+| `test_kb_entries.py` | Learning loop ingestion, KB CRUD, orchestrator auto-reply |
+| `test_websocket.py` | ConnectionManager, widget WS, staff WS, REST→WS broadcast |
+| `test_endee_isolation.py` | Multi-tenant vector isolation, filter format |
+| `test_ingestion.py` | Chunking, cleaning, source extractors, is_resolved metadata |
+| `test_orchestrator.py` | Decision matrix (auto_reply, clarify, escalate) |
+| `test_rate_limit.py` | Redis sliding-window rate limiting |
+
+---
+
+## Project Structure
+
+```
+resolveai/
+├── backend/
+│   ├── main.py                    # FastAPI app + lifespan + CORS
+│   ├── core/config.py            # Pydantic Settings
+│   ├── api/
+│   │   ├── auth.py               # JWT, RBAC, registration, API keys
+│   │   ├── chat.py               # Legacy widget endpoint (HTTP)
+│   │   ├── widget.py             # New widget endpoints (REST + WS)
+│   │   ├── ws.py                 # WebSocket handlers
+│   │   ├── conversations.py      # Staff conversation management
+│   │   ├── kb.py                 # Knowledge base ingestion
+│   │   ├── dashboard.py          # Stats, tickets, audit
+│   │   ├── admin.py              # Staff mgmt, settings, KB entries
+│   │   └── superadmin.py         # Global admin views
+│   ├── services/
+│   │   ├── orchestrator.py       # Decision engine (RAG pipeline)
+│   │   ├── endee_client.py       # Endee SDK wrapper
+│   │   ├── embedding.py          # BGE-small embeddings
+│   │   ├── llm.py                # Gemini LLM client
+│   │   ├── ingestion.py          # Multi-source chunking + upsert
+│   │   ├── mongo.py              # MongoDB models + CRUD
+│   │   ├── redis_cache.py        # Rate limiting
+│   │   └── connection_manager.py # WebSocket room registry
+│   └── tests/                    # 126 tests
+├── frontend/
+│   ├── src/app/
+│   │   ├── register/page.tsx     # Company registration
+│   │   ├── login/page.tsx        # Slug input → /login/[slug]
+│   │   ├── login/[slug]/page.tsx # Company-branded login
+│   │   ├── dashboard/page.tsx    # Admin dashboard (Overview, KB, Dev, Inbox, Audit)
+│   │   ├── staff/page.tsx        # Staff inbox (real-time WS)
+│   │   ├── admin/page.tsx        # Admin panel (Staff, Settings, KB, Test Widget)
+│   │   └── superadmin/page.tsx   # SuperAdmin global views
+│   └── public/widget.js          # Embeddable chat widget (vanilla JS)
+├── docker-compose.yml            # All 5 services
+├── test-widget.html              # Standalone widget demo page
+├── .env.example                  # Environment template
+└── README.md
+```
+
+---
+
+## RBAC (Role-Based Access Control)
+
+```
+SuperAdmin          ← Global platform admin, sees all companies
+    │
+    ├── Admin       ← Company owner, manages staff + settings + KB
+    │     │
+    │     └── Staff ← Handles escalated conversations, resolves tickets
+    │
+    └── Customer    ← Unauthenticated widget user (identified by session ID)
+```
+
+| Role | Capabilities |
+|------|-------------|
+| **SuperAdmin** | View all companies, users, conversations, audit logs |
+| **Admin** | Manage staff, company settings, KB entries, API keys, resolve tickets |
+| **Staff** | View conversations, reply to customers, resolve/escalate |
+| **Customer** | Chat via widget (no authentication required) |
+
+---
+
+## Decision Thresholds
+
+| Weighted Score | Action | Description |
+|---------------|--------|-------------|
+| >= 0.82 | **Auto-Reply** | Generate RAG answer from top-3 KB matches |
+| 0.60 - 0.82 | **Clarify** | Suggest related topics, ask follow-up question |
+| < 0.60 | **Escalate** | Route to human agent with full conversation context |
+
+Thresholds are **configurable per-company** via Admin → Settings.
+
+---
+
+## Supported Ingestion Sources
+
+| Source | Format | Endpoint |
+|--------|--------|----------|
+| Text/FAQ | Plain text | `POST /api/v1/kb/ingest` |
+| PDF | File upload (OCR fallback) | `POST /api/v1/kb/ingest/pdf` |
+| Slack | JSON export | `POST /api/v1/kb/ingest` (source_type=slack) |
+| Email | JSON (subject, body, from) | `POST /api/v1/kb/ingest` (source_type=email) |
+| Confluence | HTML page export | `POST /api/v1/kb/ingest` (source_type=confluence) |
+| Notion | Markdown export | `POST /api/v1/kb/ingest` (source_type=notion) |
+| Resolved Tickets | Auto-ingested on resolve | Learning loop (automatic) |
+
+---
 
 ## License
 
-Endee is open source software licensed under the **Apache License 2.0**. See the [LICENSE](./LICENSE) file for full terms.
-
-## Trademark and Branding
-
-“Endee” and the Endee logo are trademarks of Endee Labs.
-
-The Apache License 2.0 does not grant permission to use the Endee name, logos, or branding in a way that suggests endorsement or affiliation.
-
-If you offer a hosted or managed service based on this software, you must use your own branding and avoid implying it is an official Endee service.
-
-## Third-Party Software
-
-This project includes or depends on third-party software components licensed under their respective open-source licenses. Use of those components is governed by their own license terms.
+MIT

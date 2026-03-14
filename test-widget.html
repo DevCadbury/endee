@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ResolveAI — Widget Test Console</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a; min-height: 100vh; color: #e2e8f0;
+    }
+    .topbar {
+      background: #1e293b; border-bottom: 1px solid #334155;
+      padding: 12px 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .topbar h1 {
+      font-size: 18px; font-weight: 800;
+      background: linear-gradient(135deg,#38bdf8,#818cf8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; flex-shrink: 0;
+    }
+    .topbar-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: 1; }
+    .topbar input {
+      padding: 7px 12px; border-radius: 8px; border: 1px solid #475569;
+      background: #0f172a; color: #e2e8f0; font-size: 13px; font-family: monospace;
+    }
+    .topbar input:focus { outline: none; border-color: #38bdf8; }
+    .topbar button {
+      padding: 7px 16px; border-radius: 8px; border: none;
+      background: linear-gradient(135deg,#3b82f6,#6366f1);
+      color: white; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .topbar button.secondary {
+      background: #1e293b; border: 1px solid #334155; color: #94a3b8; padding: 6px 12px;
+    }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+      background: #334155; color: #94a3b8; flex-shrink: 0;
+    }
+    .status-pill.live   { background: #064e3b; color: #34d399; }
+    .status-pill.error  { background: #450a0a; color: #fca5a5; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: currentColor; }
+
+    .workspace { display: flex; height: calc(100vh - 57px); overflow: hidden; }
+
+    /* Chat panel */
+    #chat-panel {
+      flex: 1; display: flex; flex-direction: column; min-width: 0;
+      border-right: 1px solid #1e293b;
+    }
+    #chat-header {
+      background: #1e293b; padding: 12px 20px;
+      display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #334155;
+      flex-shrink: 0;
+    }
+    #chat-header h2 { font-size: 15px; font-weight: 600; margin: 0; }
+    #conv-id-badge {
+      font-family: monospace; font-size: 11px; color: #64748b;
+      background: #0f172a; border: 1px solid #1e293b;
+      padding: 2px 8px; border-radius: 4px; display: none;
+    }
+    #msgs {
+      flex: 1; overflow-y: auto; padding: 16px;
+      display: flex; flex-direction: column; gap: 6px; background: #f8fafc;
+    }
+    .msg-row { display: flex; flex-direction: column; max-width: 78%; }
+    .msg-row.user  { align-self: flex-end; }
+    .msg-row.ai    { align-self: flex-start; }
+    .msg-row.staff { align-self: flex-start; }
+    .bubble {
+      padding: 9px 14px; border-radius: 14px;
+      font-size: 13.5px; line-height: 1.5; word-break: break-word;
+    }
+    .msg-row.user  .bubble { background: #6366f1; color: white; border-bottom-right-radius: 4px; }
+    .msg-row.ai    .bubble { background: #f1f5f9; color: #1e293b; border-bottom-left-radius: 4px; border: 1px solid #e2e8f0; }
+    .msg-row.staff .bubble { background: #dcfce7; color: #166534; border-bottom-left-radius: 4px; border: 1px solid #bbf7d0; }
+    .msg-meta { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; align-items: center; }
+    .msg-time { font-size: 10px; color: #94a3b8; }
+    .msg-row.user .msg-time { text-align: right; }
+    .badge {
+      font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 600;
+      display: inline-block;
+    }
+    .badge.auto_reply { background: #dcfce7; color: #166534; }
+    .badge.clarify    { background: #fef3c7; color: #92400e; }
+    .badge.escalate   { background: #fee2e2; color: #991b1b; }
+    .badge.staff_reply{ background: #dbeafe; color: #1e40af; }
+    .confidence       { font-size: 10px; color: #94a3b8; }
+    #typing-row { display: none; align-self: flex-start; }
+    .typing-dots {
+      display: flex; gap: 4px; padding: 10px 14px; background: #f1f5f9;
+      border-radius: 14px; border-bottom-left-radius: 4px; border: 1px solid #e2e8f0;
+    }
+    .typing-dots span {
+      width: 6px; height: 6px; border-radius: 50%; background: #94a3b8;
+      animation: bounce 1.2s infinite;
+    }
+    .typing-dots span:nth-child(2) { animation-delay: .2s; }
+    .typing-dots span:nth-child(3) { animation-delay: .4s; }
+    @keyframes bounce { 0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)} }
+    #resolved-banner {
+      display: none; background: #f0fdf4; border-top: 1px solid #bbf7d0;
+      padding: 10px 20px; font-size: 13px; color: #166534; flex-shrink: 0;
+      justify-content: space-between; align-items: center;
+    }
+    #resolved-banner button {
+      background: none; border: 1px solid #16a34a; color: #16a34a;
+      padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    }
+    #input-area {
+      padding: 12px 16px; border-top: 1px solid #e2e8f0; display: flex; gap: 8px;
+      background: white; flex-shrink: 0;
+    }
+    #msg-input {
+      flex: 1; border: 1.5px solid #e2e8f0; border-radius: 20px;
+      padding: 8px 14px; font-size: 13px; outline: none; font-family: inherit;
+      resize: none; min-height: 36px; max-height: 100px; line-height: 1.5;
+    }
+    #msg-input:focus { border-color: #6366f1; }
+    #send-btn {
+      background: #6366f1; color: white; border: none; border-radius: 50%;
+      width: 36px; height: 36px; cursor: pointer; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 16px;
+    }
+    #send-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* Debug panel */
+    #debug-panel {
+      width: 400px; flex-shrink: 0; background: #0f172a;
+      display: flex; flex-direction: column; overflow: hidden;
+      border-left: 1px solid #1e293b; display: none;
+    }
+    #debug-panel.visible { display: flex; }
+    #debug-header {
+      padding: 10px 16px; border-bottom: 1px solid #1e293b;
+      display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+    }
+    #debug-header h3 { font-size: 13px; font-weight: 600; color: #94a3b8; margin: 0; }
+    #debug-log {
+      flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px;
+    }
+    .evt-card { background: #1e293b; border-radius: 6px; padding: 8px 10px; }
+    .evt-card .evt-header { font-size: 10px; color: #64748b; margin-bottom: 4px; display: flex; gap: 6px; }
+    .evt-card .evt-type { font-weight: 700; }
+    .evt-card .evt-type.message  { color: #4ade80; }
+    .evt-card .evt-type.ai_thinking { color: #fbbf24; }
+    .evt-card .evt-type.connected { color: #38bdf8; }
+    .evt-card .evt-type.other    { color: #94a3b8; }
+    .evt-card pre {
+      color: #a5f3fc; font-size: 10.5px; margin: 0;
+      white-space: pre-wrap; word-break: break-all; max-height: 140px; overflow-y: auto;
+    }
+
+    /* Snippet section */
+    #snippet-section {
+      border-top: 1px solid #1e293b; padding: 12px 20px; background: #1e293b; flex-shrink: 0;
+    }
+    #snippet-section details { font-size: 12px; color: #64748b; cursor: pointer; }
+    #snippet-section summary { color: #94a3b8; font-size: 12px; font-weight: 600; padding: 4px 0; }
+    #snippet-code {
+      font-family: monospace; font-size: 11px; color: #7dd3fc;
+      background: #0f172a; padding: 8px 12px; border-radius: 6px; margin-top: 6px;
+      white-space: pre; overflow-x: auto; border: 1px solid #334155;
+    }
+    .copy-snippet {
+      font-size: 11px; background: #334155; color: #94a3b8;
+      border: none; border-radius: 4px; padding: 2px 8px;
+      cursor: pointer; margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>ResolveAI Test Console</h1>
+  <div class="topbar-form">
+    <input type="text" id="slug-in" placeholder="Company slug (e.g. infotech)" style="width:180px" />
+    <input type="text" id="api-in" value="http://localhost:8000" style="width:200px" />
+    <button onclick="activate()">Connect</button>
+    <button class="secondary" onclick="clearChat()">Clear Chat</button>
+    <button class="secondary" id="debug-toggle" onclick="toggleDebug()">Show Debug</button>
+  </div>
+  <span class="status-pill" id="ws-pill">
+    <span class="dot"></span> Offline
+  </span>
+</div>
+
+<div class="workspace">
+
+  <div id="chat-panel">
+    <div id="chat-header">
+      <span style="font-size:20px">🤖</span>
+      <div style="flex:1">
+        <h2>AI Support Agent <span style="font-size:12px;font-weight:400;color:#94a3b8" id="powered">Powered by ResolveAI</span></h2>
+        <div style="font-size:11px;color:#64748b;margin-top:2px" id="header-sub">Enter slug and click Connect</div>
+      </div>
+      <span id="conv-id-badge"></span>
+    </div>
+
+    <div id="msgs">
+      <div style="text-align:center;color:#94a3b8;padding:48px 16px">
+        <div style="font-size:36px;margin-bottom:8px">💬</div>
+        <p style="font-size:14px">Connect to start testing your AI support agent.</p>
+        <p style="font-size:12px;margin-top:6px">Staff replies and AI responses appear here in real-time.</p>
+      </div>
+    </div>
+    <div id="typing-row"><div class="typing-dots"><span></span><span></span><span></span></div></div>
+
+    <div id="resolved-banner">
+      <span>✓ Conversation resolved</span>
+      <button onclick="clearChat()">New conversation</button>
+    </div>
+
+    <div id="input-area">
+      <textarea id="msg-input" rows="1" placeholder="Type a customer message…" disabled
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"
+        oninput="autoResize(this)"></textarea>
+      <button id="send-btn" onclick="sendMsg()" disabled>➤</button>
+    </div>
+
+    <div id="snippet-section">
+      <details>
+        <summary>Embed snippet for this slug <button class="copy-snippet" onclick="copySnippet(event)">Copy</button></summary>
+        <pre id="snippet-code"></pre>
+      </details>
+    </div>
+  </div>
+
+  <div id="debug-panel">
+    <div id="debug-header">
+      <h3>WebSocket Event Log</h3>
+      <button class="secondary" onclick="document.getElementById('debug-log').innerHTML=''" style="font-size:11px;padding:3px 8px">Clear</button>
+    </div>
+    <div id="debug-log">
+      <p style="color:#475569;font-size:12px;text-align:center;padding:24px">Events will appear here after connecting.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+var ws = null;
+var reconnectTimer = null;
+var pingTimer = null;
+var isResolved = false;
+var sessionId = '';
+var currentSlug = '';
+var currentApiUrl = '';
+var staffOnline = 0;
+
+/* ── Load slug from URL or default ─────────────────────────────────── */
+(function(){
+  var params = new URLSearchParams(location.search);
+  var s = params.get('slug') || '';
+  if (s) document.getElementById('slug-in').value = s;
+  var a = params.get('api') || '';
+  if (a) document.getElementById('api-in').value = a;
+})();
+
+/* ── WebSocket connection ─────────────────────────────────────────── */
+function activate() {
+  var slug = document.getElementById('slug-in').value.trim();
+  var api  = document.getElementById('api-in').value.trim().replace(/\/$/, '');
+  if (!slug) { alert('Enter a company slug first.'); return; }
+  currentSlug = slug;
+  currentApiUrl = api;
+  sessionId = 'test_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+  updateSnippet();
+  clearMsgs();
+  connect();
+}
+
+function connect() {
+  if (ws) { ws.onclose = null; try { ws.close(); } catch(e){} ws = null; }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+
+  setPill('connecting');
+  document.getElementById('header-sub').textContent = 'Connecting…';
+
+  var wsUrl = currentApiUrl.replace(/^http/, 'ws') + '/api/v1/ws/widget/' + currentSlug + '?session_id=' + sessionId;
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = function() {
+    if (pingTimer) clearInterval(pingTimer);
+    pingTimer = setInterval(function(){
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({type:'ping'}));
+    }, 30000);
+  };
+
+  ws.onmessage = function(evt) {
+    var data;
+    try { data = JSON.parse(evt.data); } catch(e) { return; }
+    logEvent(data);
+    handleEvent(data);
+  };
+
+  ws.onclose = function() {
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+    if (!isResolved) {
+      setPill('offline');
+      document.getElementById('msg-input').disabled = true;
+      document.getElementById('send-btn').disabled = true;
+      reconnectTimer = setTimeout(connect, 4000);
+    }
+  };
+
+  ws.onerror = function() { try { ws.close(); } catch(e) {} };
+}
+
+function handleEvent(data) {
+  var t = data.type;
+
+  if (t === 'connected') {
+    setPill('live');
+    staffOnline = data.staff_online || 0;
+    updateHeaderSub();
+    document.getElementById('msg-input').disabled = false;
+    document.getElementById('send-btn').disabled = false;
+    document.getElementById('msg-input').focus();
+
+    /* Show conv ID */
+    if (data.conv_id) {
+      var b = document.getElementById('conv-id-badge');
+      b.textContent = 'Conv #' + data.conv_id.slice(-12);
+      b.style.display = 'inline-block';
+      b.title = data.conv_id;
+    }
+
+    /* Render history or greeting */
+    if (data.messages && data.messages.length) {
+      data.messages.forEach(function(m) {
+        addMsg(m.sender_type === 'customer' ? 'user' : m.sender_type, m.content, m.metadata, m.created_at);
+      });
+    } else {
+      addMsg('ai', 'Hello! How can I help you today?', null, new Date().toISOString());
+    }
+
+  } else if (t === 'message') {
+    hideTyping();
+    if (data.sender_type !== 'customer') {
+      /* treat admin same as staff for display */
+      var displayRole = (data.sender_type === 'ai') ? 'ai' : 'staff';
+      addMsg(displayRole, data.content, data.metadata, data.created_at);
+    }
+
+  } else if (t === 'message_ack') {
+    /* already shown optimistically */
+
+  } else if (t === 'ai_thinking') {
+    showTyping();
+
+  } else if (t === 'typing') {
+    if (data.sender_type !== 'customer') {
+      showTyping();
+      clearTimeout(window._typingTO);
+      window._typingTO = setTimeout(hideTyping, 4000);
+    }
+
+  } else if (t === 'conversation_status') {
+    if (data.new_status === 'resolved') {
+      hideTyping();
+      isResolved = true;
+      document.getElementById('resolved-banner').style.display = 'flex';
+      document.getElementById('input-area').style.display = 'none';
+    }
+
+  } else if (t === 'presence') {
+    if (data.role === 'staff') {
+      staffOnline = data.event === 'joined' ? staffOnline + 1 : Math.max(0, staffOnline - 1);
+      updateHeaderSub();
+    }
+  }
+}
+
+/* ── Chat UI ─────────────────────────────────────────────────────── */
+function addMsg(role, content, meta, ts) {
+  /* Remove empty-state placeholder */
+  var empty = document.querySelector('#msgs > div[style*="text-align:center"]');
+  if (empty) empty.remove();
+
+  var msgsEl = document.getElementById('msgs');
+  var typingRow = document.getElementById('typing-row');
+
+  var row = document.createElement('div');
+  row.className = 'msg-row ' + (role === 'customer' ? 'user' : role);
+
+  var bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = content;
+  row.appendChild(bubble);
+
+  /* Meta row: timestamp + badges */
+  var metaDiv = document.createElement('div');
+  metaDiv.className = 'msg-meta';
+
+  var timeEl = document.createElement('span');
+  timeEl.className = 'msg-time';
+  var d = ts ? new Date(ts) : new Date();
+  timeEl.textContent = d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  metaDiv.appendChild(timeEl);
+
+  if (meta && meta.action) {
+    var badge = document.createElement('span');
+    badge.className = 'badge ' + meta.action;
+    var labels = {auto_reply:'✓ Auto-resolved', clarify:'◎ Clarifying', escalate:'→ Escalated'};
+    badge.textContent = labels[meta.action] || meta.action;
+    metaDiv.appendChild(badge);
+  }
+  if (role === 'staff') {
+    var sb = document.createElement('span');
+    sb.className = 'badge staff_reply';
+    sb.textContent = '👤 Staff';
+    metaDiv.appendChild(sb);
+  }
+  if (meta && meta.confidence && meta.confidence > 0) {
+    var conf = document.createElement('span');
+    conf.className = 'confidence';
+    conf.textContent = (meta.confidence * 100).toFixed(0) + '% confidence';
+    metaDiv.appendChild(conf);
+  }
+  row.appendChild(metaDiv);
+  msgsEl.insertBefore(row, typingRow);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+
+function showTyping() {
+  var tr = document.getElementById('typing-row');
+  tr.style.display = 'flex';
+  document.getElementById('msgs').scrollTop = document.getElementById('msgs').scrollHeight;
+}
+function hideTyping() {
+  document.getElementById('typing-row').style.display = 'none';
+}
+
+function sendMsg() {
+  var input = document.getElementById('msg-input');
+  var text = input.value.trim();
+  if (!text || isResolved || !ws || ws.readyState !== WebSocket.OPEN) return;
+  input.value = '';
+  autoResize(input);
+  addMsg('user', text, null, new Date().toISOString());
+  ws.send(JSON.stringify({type:'message', content: text}));
+}
+
+function clearMsgs() {
+  var msgsEl = document.getElementById('msgs');
+  msgsEl.innerHTML = '<div id="typing-row" style="display:none"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
+  document.getElementById('resolved-banner').style.display = 'none';
+  document.getElementById('input-area').style.display = 'flex';
+  document.getElementById('msg-input').disabled = true;
+  document.getElementById('send-btn').disabled = true;
+  document.getElementById('conv-id-badge').style.display = 'none';
+  document.getElementById('conv-id-badge').textContent = '';
+  isResolved = false;
+  staffOnline = 0;
+}
+
+function clearChat() {
+  if (ws) { ws.onclose = null; try { ws.close(); } catch(e){} ws = null; }
+  clearMsgs();
+  isResolved = false;
+  if (currentSlug) {
+    sessionId = 'test_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+    setPill('offline');
+    document.getElementById('header-sub').textContent = 'Reconnecting with new session…';
+    connect();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+/* ── Status helpers ──────────────────────────────────────────────── */
+function setPill(state) {
+  var pill = document.getElementById('ws-pill');
+  pill.className = 'status-pill' + (state === 'live' ? ' live' : state === 'error' ? ' error' : '');
+  var labels = {live:'Live', connecting:'Connecting…', offline:'Offline – reconnecting…'};
+  pill.innerHTML = '<span class="dot"></span> ' + (labels[state] || state);
+}
+function updateHeaderSub() {
+  var sub = document.getElementById('header-sub');
+  if (!currentSlug) return;
+  sub.textContent = staffOnline > 0
+    ? staffOnline + ' staff agent' + (staffOnline > 1 ? 's' : '') + ' online'
+    : 'AI Support Active · slug: ' + currentSlug;
+}
+
+/* ── Debug panel ─────────────────────────────────────────────────── */
+function toggleDebug() {
+  var panel = document.getElementById('debug-panel');
+  var btn = document.getElementById('debug-toggle');
+  var visible = panel.classList.toggle('visible');
+  btn.textContent = visible ? 'Hide Debug' : 'Show Debug';
+}
+
+function logEvent(data) {
+  var log = document.getElementById('debug-log');
+  /* Remove "events will appear" placeholder */
+  var ph = log.querySelector('p');
+  if (ph) ph.remove();
+
+  var card = document.createElement('div');
+  card.className = 'evt-card';
+
+  var typeClass = ['message','message_ack','ai_thinking','connected'].indexOf(data.type) >= 0
+    ? data.type.replace('_','').replace('ack','') : 'other';
+
+  var now = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  card.innerHTML = '<div class="evt-header"><span class="evt-time">' + now + '</span>'
+    + '<span class="evt-type ' + typeClass + '">' + data.type + '</span></div>'
+    + '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+
+  /* Insert newest at top */
+  log.insertBefore(card, log.firstChild);
+
+  /* Cap at 50 events */
+  while (log.children.length > 50) log.removeChild(log.lastChild);
+}
+
+/* ── Snippet ─────────────────────────────────────────────────────── */
+function updateSnippet() {
+  var api = currentApiUrl || document.getElementById('api-in').value.trim();
+  var slug = currentSlug || document.getElementById('slug-in').value.trim() || 'YOUR_SLUG';
+  var widgetSrc = api.replace(/:\d+/, ':3000') + '/widget.js';
+  document.getElementById('snippet-code').textContent =
+    '<script src="' + widgetSrc + '"\n  data-slug="' + slug + '"\n  data-api-url="' + api + '"><\/script>';
+}
+function copySnippet(e) {
+  e.stopPropagation();
+  var code = document.getElementById('snippet-code').textContent;
+  navigator.clipboard.writeText(code).then(function() {
+    var btn = e.target;
+    btn.textContent = 'Copied!';
+    btn.style.background = '#22c55e';
+    btn.style.color = 'white';
+    setTimeout(function() { btn.textContent = 'Copy'; btn.style.background=''; btn.style.color=''; }, 2000);
+  });
+}
+
+/* Update snippet live */
+document.getElementById('slug-in').addEventListener('input', updateSnippet);
+document.getElementById('api-in').addEventListener('input', updateSnippet);
+
+/* Init snippet with defaults */
+updateSnippet();
+
+/* Auto-connect if slug pre-filled from URL */
+(function(){
+  var s = document.getElementById('slug-in').value.trim();
+  if (s) { setTimeout(activate, 200); }
+})();
+</script>
+</body>
+</html>

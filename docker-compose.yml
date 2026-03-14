@@ -1,35 +1,151 @@
+# =============================================================================
+# AI Customer Support SaaS Platform — Docker Compose
+# Services: Endee (Vector DB), MongoDB, Redis, Backend (FastAPI), Frontend (Next.js)
+#
+# Usage:
+#   cp .env.example .env       # fill in GEMINI_API_KEY and JWT_SECRET
+#   docker compose up --build
+#
+# Access:
+#   Frontend  → http://localhost:3000
+#   Backend   → http://localhost:8000  (docs: http://localhost:8000/docs)
+#   Endee     → http://localhost:8080
+# =============================================================================
+
 services:
-  endee-oss:
-    image: endee-oss:latest
-    container_name: endee-oss
+  # ---------------------------------------------------------------------------
+  # Endee Vector Database — High-performance vector search
+  # Docs: https://docs.endee.io | GitHub: https://github.com/endee-io/endee
+  # ---------------------------------------------------------------------------
+  endee:
+    image: endeeio/endee-server:latest
+    container_name: endee-server
     ports:
       - "8080:8080"
     ulimits:
       nofile: 100000
-# ----------------------------------------------------
-# Logging Configuration Block
     logging:
-      driver: "json-file" # Explicitly use the default driver
+      driver: "json-file"
       options:
-        # Set the max size of a single log file to 200 megabytes
-        # Docker rotates the log file when it hits this limit
         max-size: "200m"
-        # Set the maximum number of log files to keep
-        # (200m * 5 files = 1000m or 1 GB total log space)
         max-file: "5"
-# ----------------------------------------------------
     environment:
-      NDD_NUM_THREADS: 0
-      NDD_AUTH_TOKEN: "" # Replace with your auth token
+      NDD_NUM_THREADS: 0          # Automatic thread detection
+      NDD_AUTH_TOKEN: ""          # Set a token in production
     volumes:
       - endee-data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # MongoDB — Primary database for users, companies, tickets, chat sessions
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7
+    container_name: mongodb-server
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: support_ai
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Redis — Rate limiting + caching layer
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: redis-server
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Backend — FastAPI + Endee + LLM orchestration
+  # Waits for all infrastructure services to be healthy before starting.
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend-server
+    ports:
+      - "8000:8000"
+    environment:
+      # --- Infrastructure (Docker service hostnames) ---
+      ENDEE_URL: http://endee:8080
+      MONGODB_URL: mongodb://mongodb:27017/support_ai
+      REDIS_URL: redis://redis:6379
+      # --- LLM (Google Gemini) ---
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.0-flash}
+      # --- Auth ---
+      JWT_SECRET: ${JWT_SECRET:-change-this-before-deploying-to-production}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 1440
+      # --- Thresholds ---
+      AUTO_RESOLVE_THRESHOLD: ${AUTO_RESOLVE_THRESHOLD:-0.82}
+      CLARIFY_THRESHOLD: ${CLARIFY_THRESHOLD:-0.60}
+      # --- Rate Limiting ---
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-20}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    depends_on:
+      endee:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # Frontend — Next.js dashboard + chat widget
+  # NEXT_PUBLIC_API_URL must be the public address of the backend
+  # (the URL your browser uses, not the Docker internal hostname).
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    container_name: frontend-server
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
-  # Modify the 'device' path below to change the host directory used for data persistence
   endee-data:
-    # driver: local
-    # driver_opts:
-    # type: ext4
-    # o: bind
-    # device: ${PWD}/dockerdata
+  mongo-data:
+  redis-data:

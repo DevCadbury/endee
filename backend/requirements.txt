@@ -1,0 +1,42 @@
+# =============================================================================
+# AI Customer Support SaaS — Python Dependencies
+# =============================================================================
+
+# --- Web Framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.18
+
+# --- LLM (Google Gemini via httpx REST) ---
+# httpx is used below; no additional LLM SDK required.
+
+# --- Embeddings (Local, 100% Free) ---
+sentence-transformers==3.3.1
+
+# --- Vector Database Client ---
+endee==0.1.6
+
+# --- MongoDB (Async) ---
+motor==3.6.0
+
+# --- Redis ---
+redis==5.2.1
+
+# --- Configuration & Env ---
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+
+# --- Auth ---
+bcrypt==4.2.1
+python-jose[cryptography]==3.3.0
+
+# --- PDF Processing ---
+PyPDF2==3.0.1
+pytesseract==0.3.13
+
+# --- HTTP Client ---
+httpx==0.28.1
+
+# --- Testing ---
+pytest==8.3.4
+pytest-asyncio==0.25.0
