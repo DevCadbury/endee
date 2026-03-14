@@ -204,8 +204,8 @@ score = (
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/DevCadbury/ResolveAI.git
-cd ResolveAI
+git clone https://github.com/DevCadbury/endee.git
+cd endee
 
 # 2. Configure environment
 cp .env.example .env
